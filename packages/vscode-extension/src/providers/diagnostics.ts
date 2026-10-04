@@ -4,21 +4,40 @@
 
 import * as vscode from 'vscode';
 import { getDiagnostics, type Diagnostic } from '@teloce/language-service';
+import { isComponentDocument } from '../documents.js';
 
 export class TeloceDiagnosticProvider {
   private diagnosticCollection: vscode.DiagnosticCollection;
-  private timer: NodeJS.Timeout | null = null;
-  private enabled: boolean = true;
+  /** One pending validation per document, so editing file B doesn't cancel file A's. */
+  private timers = new Map<string, NodeJS.Timeout>();
+  private disposables: vscode.Disposable[] = [];
 
   constructor() {
     this.diagnosticCollection = vscode.languages.createDiagnosticCollection('teloce');
   }
 
+  /** `teloce.validate.enable` (on by default). */
+  private get enabled(): boolean {
+    return vscode.workspace.getConfiguration('teloce.validate').get<boolean>('enable', true) !== false;
+  }
+
+  /**
+   * Validates a document and publishes the results. Only Teloce components
+   * are validated: `.vel` files and component-style `.html` files, never page
+   * shells. `force` runs even when the setting is off (the explicit
+   * "Teloce: Validate" command).
+   */
   async provideDiagnostics(
     document: vscode.TextDocument,
-    _token: vscode.CancellationToken
+    _token: vscode.CancellationToken,
+    force = false
   ): Promise<vscode.Diagnostic[]> {
-    if (!this.enabled || document.languageId !== 'teloce') {
+    if (!isComponentDocument(document)) {
+      this.diagnosticCollection.delete(document.uri);
+      return [];
+    }
+    if (!force && !this.enabled) {
+      this.diagnosticCollection.delete(document.uri);
       return [];
     }
 
@@ -73,50 +92,61 @@ export class TeloceDiagnosticProvider {
       info: vscode.DiagnosticSeverity.Information,
       hint: vscode.DiagnosticSeverity.Hint,
     };
-    return map[severity] || vscode.DiagnosticSeverity.Information;
+    // `??` not `||`: DiagnosticSeverity.Error is 0, which is falsy.
+    return map[severity] ?? vscode.DiagnosticSeverity.Information;
   }
 
   startMonitoring() {
-    // Monitor open documents
+    const d = this.disposables;
+
+    // Everything already open (not just the active editor)
+    for (const document of vscode.workspace.textDocuments) {
+      this.scheduleDiagnostics(document, 0);
+    }
     const activeEditor = vscode.window.activeTextEditor;
-    if (activeEditor) {
-      this.provideDiagnostics(activeEditor.document, new vscode.CancellationTokenSource().token);
+    if (activeEditor && !vscode.workspace.textDocuments.includes(activeEditor.document)) {
+      this.scheduleDiagnostics(activeEditor.document, 0);
     }
 
-    // Watch for document changes
-    vscode.workspace.onDidChangeTextDocument((event) => {
-      if (event.document.languageId === 'teloce') {
-        this.scheduleDiagnostics(event.document);
-      }
-    });
-
-    vscode.workspace.onDidOpenTextDocument((document) => {
-      if (document.languageId === 'teloce') {
-        this.scheduleDiagnostics(document);
-      }
-    });
-
-    vscode.workspace.onDidSaveTextDocument((document) => {
-      if (document.languageId === 'teloce') {
-        this.scheduleDiagnostics(document);
-      }
-    });
+    d.push(
+      vscode.workspace.onDidChangeTextDocument((event) => this.scheduleDiagnostics(event.document)),
+      vscode.workspace.onDidOpenTextDocument((document) => this.scheduleDiagnostics(document)),
+      vscode.workspace.onDidSaveTextDocument((document) => this.scheduleDiagnostics(document)),
+      vscode.workspace.onDidCloseTextDocument((document) => {
+        this.cancel(document);
+        this.diagnosticCollection.delete(document.uri);
+      }),
+      // Turning validation on/off applies straight away
+      vscode.workspace.onDidChangeConfiguration((event) => {
+        if (!event.affectsConfiguration('teloce.validate')) return;
+        for (const document of vscode.workspace.textDocuments) this.scheduleDiagnostics(document, 0);
+      })
+    );
   }
 
-  private scheduleDiagnostics(document: vscode.TextDocument) {
-    if (this.timer) {
-      clearTimeout(this.timer);
-    }
-    this.timer = setTimeout(() => {
-      this.provideDiagnostics(document, new vscode.CancellationTokenSource().token);
-      this.timer = null;
-    }, 500);
+  private cancel(document: vscode.TextDocument) {
+    const key = document.uri.toString();
+    const pending = this.timers.get(key);
+    if (pending) clearTimeout(pending);
+    this.timers.delete(key);
+  }
+
+  private scheduleDiagnostics(document: vscode.TextDocument, delay = 500) {
+    if (!isComponentDocument(document) && !this.diagnosticCollection.has(document.uri)) return;
+    this.cancel(document);
+    this.timers.set(
+      document.uri.toString(),
+      setTimeout(() => {
+        this.timers.delete(document.uri.toString());
+        void this.provideDiagnostics(document, new vscode.CancellationTokenSource().token);
+      }, delay)
+    );
   }
 
   dispose() {
-    if (this.timer) {
-      clearTimeout(this.timer);
-    }
+    for (const timer of this.timers.values()) clearTimeout(timer);
+    this.timers.clear();
+    for (const d of this.disposables.splice(0)) d.dispose();
     this.diagnosticCollection.dispose();
   }
 }

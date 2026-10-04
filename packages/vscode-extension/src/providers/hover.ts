@@ -4,6 +4,7 @@
 
 import * as vscode from 'vscode';
 import { getHoverInfo, type HoverInfo } from '@teloce/language-service';
+import { isComponentDocument } from '../documents.js';
 
 export class TeloceHoverProvider implements vscode.HoverProvider {
   async provideHover(
@@ -11,6 +12,7 @@ export class TeloceHoverProvider implements vscode.HoverProvider {
     position: vscode.Position,
     token: vscode.CancellationToken
   ): Promise<vscode.Hover | null> {
+    if (!isComponentDocument(document)) return null;
     const content = document.getText();
 
     try {

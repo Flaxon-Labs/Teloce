@@ -4,6 +4,7 @@
 
 import * as vscode from 'vscode';
 import { formatTemplate } from '@teloce/language-service';
+import { isComponentDocument } from '../documents.js';
 
 export class TeloceFormattingProvider implements vscode.DocumentFormattingEditProvider {
   async provideDocumentFormattingEdits(
@@ -11,6 +12,7 @@ export class TeloceFormattingProvider implements vscode.DocumentFormattingEditPr
     options: vscode.FormattingOptions,
     token: vscode.CancellationToken
   ): Promise<vscode.TextEdit[]> {
+    if (!isComponentDocument(document)) return [];
     try {
       const content = document.getText();
       const config = vscode.workspace.getConfiguration('teloce.format');

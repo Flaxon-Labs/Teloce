@@ -71,6 +71,16 @@
         "command": "teloce.openDebugger",
         "title": "Open Teloce Debugger",
         "category": "Teloce"
+      },
+      {
+        "command": "teloce.stopDebugger",
+        "title": "Stop Debugger",
+        "category": "Teloce"
+      },
+      {
+        "command": "teloce.copyDebuggerScript",
+        "title": "Copy Debugger Script Tag",
+        "category": "Teloce"
       }
     ],
     "keybindings": [
@@ -112,6 +122,16 @@
           "type": "number",
           "default": 9000,
           "description": "Debugger port"
+        },
+        "teloce.typescript.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Type-check <script lang=\"ts\"> blocks in .vel and component-style .html files, and provide TypeScript hover, completion and go-to-definition there."
+        },
+        "teloce.typescript.strict": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use TypeScript's strict mode for <script lang=\"ts\"> blocks. A tsconfig.json in the workspace root takes precedence."
         }
       }
     }
@@ -123,9 +143,12 @@
     "package": "vsce package --no-dependencies",
     "publish": "vsce publish --no-dependencies",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:bundle": "node scripts/smoke-bundle.cjs",
+    "test:release": "pnpm run build && pnpm run test && pnpm run test:bundle"
   },
   "dependencies": {
+    "@teloce/debugger": "workspace:^",
     "@teloce/language-service": "workspace:^"
   },
   "devDependencies": {
@@ -134,5 +157,9 @@
     "tsup": "^8.5.0",
     "typescript": "^5.5.0",
     "vitest": "^2.0.0"
-  }
+  },
+  "activationEvents": [
+    "onLanguage:teloce",
+    "onLanguage:html"
+  ]
 }

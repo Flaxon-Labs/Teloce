@@ -8,7 +8,13 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   minify: false,
-  external: ['vscode'],
+  // `bufferutil` / `utf-8-validate` are optional native add-ons that `ws` tries
+  // to load inside try/catch; leave them external so ws falls back to its
+  // pure-JS path instead of failing the bundle.
+  external: ['vscode', 'bufferutil', 'utf-8-validate'],
+  // The debugger package uses import.meta.url to find its dashboard files;
+  // shims make that work in the CJS bundle (resolves next to extension.cjs).
+  shims: true,
   // Bundle every @teloce/* workspace dependency (language-service, and
   // whatever it transitively pulls in - compiler, shared) directly into
   // dist/extension.cjs, rather than leaving them as unresolved `require()`
@@ -37,7 +43,12 @@ export default defineConfig({
   // `vscode` stays external correctly, unaffected by this - it isn't a
   // real npm package to bundle at all, it's a virtual module the
   // extension host provides at runtime.
-  noExternal: [/@teloce\/.*/],
+  noExternal: [/@teloce\/.*/, 'typescript', 'ws'],
+  // TypeScript and `ws` (used by the embedded debugger server) are bundled
+  // too, for the same --no-dependencies reason. Two things are read from disk
+  // at runtime and must ship next to the bundle: TypeScript's lib.*.d.ts files
+  // and the debugger dashboard's html/js/css.
+  onSuccess: 'node scripts/copy-ts-libs.mjs && node scripts/copy-dashboard.mjs',
   outDir: 'dist',
   splitting: false,
   dts: false,

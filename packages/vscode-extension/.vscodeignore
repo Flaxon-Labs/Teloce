@@ -8,4 +8,9 @@ vsc-extension-quickstart.md
 **/.eslintrc.json
 **/*.map
 **/*.ts
-!dist/**
+# Ship only the bundle and TypeScript's lib files (no source maps: the bundle
+# includes TypeScript, so its map is ~14 MB).
+!dist/extension.cjs
+!dist/ts-lib/**
+!dist/dashboard/**
+scripts/**
