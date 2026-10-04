@@ -11,6 +11,16 @@ import {
   translateError,
   getSuggestion,
 } from './error-parser';
+export {
+  findSourceLocation,
+  findLocationInMessage,
+  parseStackFrames,
+  getSourceKind,
+  normalizeSourcePath,
+  isComponentKind,
+  type SourceKind,
+  type SourceLocation,
+} from './source';
 
 import {
   generateSuggestions,
