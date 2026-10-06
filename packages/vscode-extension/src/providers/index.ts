@@ -10,3 +10,4 @@ export { TeloceDiagnosticProvider } from './diagnostics.js';
 export { TeloceHoverProvider } from './hover.js';
 export { TeloceFormattingProvider } from './formatting.js';
 export { TeloceSymbolProvider } from './symbols.js';
+export { TeloceTypeScriptFeatures } from './typescript.js';

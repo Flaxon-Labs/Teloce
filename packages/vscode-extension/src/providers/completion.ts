@@ -4,6 +4,7 @@
 
 import * as vscode from 'vscode';
 import { getCompletionItems, type CompletionItem } from '@teloce/language-service';
+import { isComponentDocument } from '../documents.js';
 
 export class TeloceCompletionProvider implements vscode.CompletionItemProvider {
   async provideCompletionItems(
@@ -12,6 +13,12 @@ export class TeloceCompletionProvider implements vscode.CompletionItemProvider {
     token: vscode.CancellationToken,
     context: vscode.CompletionContext
   ): Promise<vscode.CompletionItem[]> {
+    // Never offer template completions in page shells (Flask/Django .html),
+    // and honour the `teloce.completion.enable` setting.
+    if (!isComponentDocument(document)) return [];
+    const enabled = vscode.workspace.getConfiguration('teloce.completion').get<boolean>('enable', true);
+    if (enabled === false) return [];
+
     const content = document.getText();
     const offset = document.offsetAt(position);
 

@@ -3,6 +3,8 @@
  */
 
 import { createWebSocketServer, type WebSocketServer } from '@teloce/server';
+import { parseError, translateError } from '../error-parser';
+import { getSourceKind } from '../source';
 
 export type DebugMessageType =
   | 'error'
@@ -15,6 +17,18 @@ export type DebugMessageType =
   | 'log'
   | 'connected'
   | 'disconnected';
+
+/** Message types a page may send for the dashboard to display. */
+const RELAYED_TYPES = new Set<DebugMessageType>([
+  'error',
+  'state',
+  'performance',
+  'compile',
+  'render',
+  'component',
+  'event',
+  'log',
+]);
 
 export interface DebugMessage<T = any> {
   /**
@@ -123,6 +137,85 @@ export function createDebugWebSocket(
     };
   }
 
+  /**
+   * Builds the message the dashboard shows for an error: works out where it
+   * happened (a .vel or .html component, say) unless the caller already said,
+   * and attaches a readable title and fix. Explicit arguments win over
+   * anything inferred.
+   */
+  function buildErrorMessage(
+    error: Error | string,
+    source?: string,
+    line?: number,
+    column?: number
+  ): DebugMessage {
+    const message = typeof error === 'string' ? error : error.message;
+    const stack = typeof error === 'object' ? error.stack : undefined;
+
+    const parsed = parseError(error);
+    const translation = translateError(error);
+    const file = source ?? parsed.file;
+    const where = {
+      source: file,
+      line: source !== undefined ? line : (line ?? parsed.line),
+      column: source !== undefined ? column : (column ?? parsed.column),
+    };
+
+    return createMessage(
+      'error',
+      {
+        message,
+        stack,
+        title: translation.title,
+        description: translation.description,
+        fix: translation.fix,
+        category: parsed.category,
+        source: where.source,
+        sourceKind: file ? getSourceKind(file) : undefined,
+        line: where.line,
+        column: where.column,
+      },
+      where.source,
+      where.line,
+      where.column
+    );
+  }
+
+  /** Sends to every connected client except `except` (the page that sent it). */
+  function relay(message: DebugMessage, except?: { id: string }): void {
+    for (const client of wsServer.clients) {
+      if (client.id !== except?.id) wsServer.send(client, message);
+    }
+  }
+
+  // Pages (and anything else) can report to the dashboard by sending debug
+  // messages over this same WebSocket; see the drop-in client.js script.
+  wsServer.on('message', (event: { client: { id: string }; message: any }) => {
+    const message = event?.message;
+    if (!message || typeof message.type !== 'string') return;
+    if (!RELAYED_TYPES.has(message.type as DebugMessageType)) return;
+    const payload = message.payload && typeof message.payload === 'object' ? message.payload : {};
+
+    if (message.type === 'error') {
+      const error = Object.assign(new Error(String(payload.message ?? 'Unknown error')), {
+        // An error from a page has the page's stack, not this server's.
+        stack: typeof payload.stack === 'string' ? payload.stack : undefined,
+      });
+      relay(
+        buildErrorMessage(
+          error,
+          typeof payload.source === 'string' ? payload.source : undefined,
+          typeof payload.line === 'number' ? payload.line : undefined,
+          typeof payload.column === 'number' ? payload.column : undefined
+        ),
+        event.client
+      );
+      return;
+    }
+
+    relay(createMessage(message.type as DebugMessageType, payload), event.client);
+  });
+
   function broadcast(message: DebugMessage): void {
     wsServer.broadcast(message);
   }
@@ -131,9 +224,7 @@ export function createDebugWebSocket(
     server: wsServer,
 
     sendError(error: Error | string, source?: string, line?: number, column?: number): void {
-      const message = typeof error === 'string' ? error : error.message;
-      const stack = typeof error === 'object' ? error.stack : undefined;
-      broadcast(createMessage('error', { message, stack }, source, line, column));
+      broadcast(buildErrorMessage(error, source, line, column));
     },
 
     sendState(state: Record<string, any>, component?: string): void {

@@ -2,6 +2,8 @@
  * Error Parser - Translates TypeScript/runtime errors into plain English
  */
 
+import { findSourceLocation, type SourceKind } from '../source';
+
 export type ErrorCategory =
   | 'type_error'
   | 'reference_error'
@@ -36,6 +38,11 @@ export interface ParsedError {
    * File where error occurred
    */
   file?: string;
+
+  /**
+   * What kind of file it was: a `.vel` or `.html` component, etc.
+   */
+  sourceKind?: SourceKind;
 
   /**
    * Line number
@@ -159,6 +166,33 @@ const errorPatterns: Array<{
       docs: 'Make sure the variable is declared or imported.',
     }),
   },
+  // `x is not defined` - what browsers and Node actually throw (ReferenceError)
+  {
+    pattern: /^(?:Uncaught )?(?:ReferenceError: )?([A-Za-z_$][\w$.]*) is not defined/,
+    category: 'reference_error',
+    translate: (match, _parsed) => ({
+      title: 'Undefined Variable',
+      description: `"${match[1]}" is used but was never defined.`,
+      fix: `Declare "${match[1]}" (in data(), props, or an import), or check the spelling. In a component, use "this.${match[1]}" for data and methods.`,
+      example: `export default {\n  data() { return { ${match[1]}: null }; },\n};`,
+      docs: 'Make sure the variable is declared or imported before it is used.',
+    }),
+  },
+  // Modern wording: "Cannot read properties of undefined (reading 'x')"
+  {
+    pattern: /Cannot (?:read|set) propert(?:y|ies) of (?:undefined|null) \((?:reading|setting) '(.+?)'\)/,
+    category: 'property_error',
+    translate: (match, parsed) => {
+      const empty = /of (undefined|null)/.exec(parsed.original)?.[1] ?? 'undefined';
+      return {
+        title: 'Property Access on Empty Value',
+        description: `Tried to use property "${match[1]}" on ${empty}.`,
+        fix: `Make sure the object exists before using "${match[1]}". If it comes from data(), give it an initial value; if it is loaded later, guard it with v-if or ?.`,
+        example: `// Guard it:\nthis.item?.${match[1]}\n// or give data() a default:\ndata() { return { item: {} }; }`,
+        docs: 'Add a null check, or make sure the data is loaded before it is read.',
+      };
+    },
+  },
   // Property Errors
   {
     pattern: /Cannot read property '(.+)' of (undefined|null)/,
@@ -240,19 +274,13 @@ export function parseError(error: Error | string): ParsedError {
   const message = typeof error === 'string' ? error : error.message;
   const stack = typeof error === 'string' ? undefined : error.stack;
 
-  // Extract file and line from stack
-  let file: string | undefined;
-  let line: number | undefined;
-  let column: number | undefined;
-
-  if (stack) {
-    const stackMatch = stack.match(/at .+ \((.+):(\d+):(\d+)\)/);
-    if (stackMatch) {
-      file = stackMatch[1];
-      line = parseInt(stackMatch[2]);
-      column = parseInt(stackMatch[3]);
-    }
-  }
+  // Where did it happen? Reads .vel, .html and .teloce components from stack
+  // traces (Chrome/Node and Firefox/Safari) or from the message itself.
+  const location = findSourceLocation(stack, message);
+  const file = location?.file;
+  const line = location?.line;
+  const column = location?.column;
+  const sourceKind = location?.kind;
 
   // Try to match patterns
   for (const pattern of errorPatterns) {
@@ -264,6 +292,7 @@ export function parseError(error: Error | string): ParsedError {
         category: pattern.category,
         name,
         file,
+        sourceKind,
         line,
         column,
         stack,
@@ -276,6 +305,7 @@ export function parseError(error: Error | string): ParsedError {
     original: message,
     category: 'unknown',
     file,
+    sourceKind,
     line,
     column,
     stack,

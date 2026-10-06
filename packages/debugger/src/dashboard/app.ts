@@ -5,6 +5,8 @@
  * It connects to the WebSocket server and displays real-time data.
  */
 
+import { formatSource } from './format';
+
 // ===== Types =====
 
 interface DebugMessage {
@@ -34,6 +36,7 @@ interface ErrorData {
     message: string;
     stack?: string;
     source?: string;
+    sourceKind?: string;
     line?: number;
     column?: number;
     timestamp: number;
@@ -192,7 +195,7 @@ function setConnectionStatus(status: 'connected' | 'disconnected' | 'connecting'
 function handleMessage(message: DebugMessage) {
     switch (message.type) {
         case 'error':
-            handleError(message.payload);
+            handleError(message.payload, message);
             break;
         case 'state':
             handleState(message.payload);
@@ -222,13 +225,16 @@ function handleMessage(message: DebugMessage) {
 
 // ===== Error Handler =====
 
-function handleError(data: any) {
+function handleError(data: any, envelope?: DebugMessage) {
+    // The location is in the payload from current servers; older ones only
+    // put it on the outer message, so fall back to that.
     const error: ErrorData = {
         message: data.message || 'Unknown error',
         stack: data.stack,
-        source: data.source,
-        line: data.line,
-        column: data.column,
+        source: data.source ?? envelope?.source,
+        sourceKind: data.sourceKind,
+        line: data.line ?? envelope?.line,
+        column: data.column ?? envelope?.column,
         timestamp: Date.now(),
         title: data.title || 'Error',
         fix: data.fix,
@@ -351,7 +357,7 @@ function renderRecentErrors() {
         <div class="error-item" style="margin-bottom: 8px; padding: 12px 16px; background: var(--bg-card); border: 1px solid var(--accent-red); border-radius: var(--radius-sm); border-left: 4px solid var(--accent-red);">
             <div style="font-weight: 600; color: var(--accent-red);">${escapeHtml(error.title || 'Error')}</div>
             <div style="color: var(--text-secondary); font-size: 13px;">${escapeHtml(error.message)}</div>
-            ${error.source ? `<div style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">${escapeHtml(error.source)}${error.line ? `:${error.line}` : ''}</div>` : ''}
+            ${error.source ? `<div style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">${formatSource(error, false)}</div>` : ''}
             ${error.fix ? `<div style="margin-top: 6px; padding: 6px 10px; background: var(--bg-secondary); border-radius: var(--radius-sm); border-left: 3px solid var(--accent-green); font-size: 13px; color: var(--text-secondary);">💡 ${escapeHtml(error.fix)}</div>` : ''}
         </div>
     `).join('');
@@ -375,7 +381,7 @@ function renderErrorList() {
                 <div class="error-time">${formatTime(error.timestamp)}</div>
             </div>
             <div class="error-message">${escapeHtml(error.message)}</div>
-            ${error.source ? `<div style="color: var(--text-muted); font-size: 12px; margin-bottom: 8px;">📍 ${escapeHtml(error.source)}${error.line ? `:${error.line}` : ''}${error.column ? `:${error.column}` : ''}</div>` : ''}
+            ${error.source ? `<div style="color: var(--text-muted); font-size: 12px; margin-bottom: 8px;">📍 ${formatSource(error, true)}</div>` : ''}
             ${error.fix ? `
                 <div class="error-fix">
                     <div class="error-fix-label">💡 Suggested Fix</div>

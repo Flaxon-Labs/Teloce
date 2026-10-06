@@ -419,6 +419,9 @@ importers:
 
   packages/vscode-extension:
     dependencies:
+      '@teloce/debugger':
+        specifier: workspace:^
+        version: link:../debugger
       '@teloce/language-service':
         specifier: workspace:^
         version: link:../language-service

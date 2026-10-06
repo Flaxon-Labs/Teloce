@@ -207,3 +207,79 @@ You can also install it through VS Code:
 ## License
 
 MIT
+
+## TypeScript support
+
+Write `<script lang="ts">` in a `.vel` file, or in a component-style `.html`
+file, and you get real TypeScript type-checking, hover, completion and
+go-to-definition, with errors shown at the right place in your file.
+
+```html
+<script lang="ts">
+export default {
+  props: { title: { type: String, required: true } },
+  data() { return { count: 0 }; },
+  methods: {
+    inc() {
+      this.count = 'x';   // error: string is not assignable to number
+      this.cnt;           // error: no such property
+    },
+  },
+};
+</script>
+```
+
+- `this` is typed from `props`, `data()`, `computed`, `methods` and `setup()`.
+  `$`-prefixed members (`$emit`, `$refs`, `$router`, ...) are always allowed.
+- `.html` files are only treated as components when they have a top-level
+  `<template>` or a `<script lang="ts">` and are **not** a full page
+  (`<!doctype>`, `<html>`, `<head>`, `<body>`). Flask/Django page templates are
+  left alone.
+- Plain `<script>` (JavaScript) blocks are not type-checked.
+- A `tsconfig.json` in the workspace root is honored.
+
+Settings: `teloce.typescript.enable` and `teloce.typescript.strict`.
+
+Not covered yet: type-checking expressions inside `<template>`
+(`{{ mesage.text }}`), and typed imports of other `.vel` components
+(they import as `any`).
+
+## Debugger
+
+Run **Teloce: Open Debugger** from the Command Palette. The dashboard server is
+built into the extension, so there is nothing else to install or start: it
+starts on `teloce.debugger.host` / `teloce.debugger.port` (default
+`localhost:9000`) and opens in your browser. **Teloce: Stop Debugger** shuts it
+down, and it also stops when VS Code closes.
+
+To see a page's errors in the dashboard, add one tag to the page (the command
+offers to copy it, or run **Teloce: Copy Debugger Script Tag**):
+
+```html
+<script src="http://localhost:9000/client.js"></script>
+```
+
+It works in any HTML: component-style `.html` files, Flask/Django pages, or
+pages built from `.vel` components. It reports uncaught errors, unhandled
+promise rejections and `console.error` / `console.warn`. Each error shows the
+file it came from with a **HTML** or **VEL** badge, the line and column, a plain
+language title and a suggested fix. Remove the tag before shipping.
+
+If you already run `teloce debug` from a terminal, the command opens that
+dashboard instead. If the port is used by another program, you get a clear
+message to change `teloce.debugger.port`.
+
+## Which files the extension works on
+
+- `.vel` files: everything.
+- `.html` files: only **component-style** ones (a top-level `<template>` or a
+  `<script lang="ts">`, and not a full page). Page shells such as Flask/Django
+  templates (`<!doctype>`, `<html>`, `<body>`) are never touched.
+- Formatting runs as format-document for `.vel`. For component-style `.html`
+  use **Teloce: Format** (the extension does not register an `.html` formatter,
+  so VS Code will not ask you to choose a default HTML formatter).
+- **Teloce: Validate** checks the template and the TypeScript and opens the
+  Problems panel when something is wrong.
+- Settings: `teloce.validate.enable`, `teloce.completion.enable`,
+  `teloce.typescript.enable`, `teloce.typescript.strict`, `teloce.format.*`,
+  `teloce.debugger.host` / `port`.

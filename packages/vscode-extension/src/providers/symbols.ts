@@ -3,12 +3,14 @@
  */
 
 import * as vscode from 'vscode';
+import { isComponentDocument } from '../documents.js';
 
 export class TeloceSymbolProvider implements vscode.DocumentSymbolProvider {
   async provideDocumentSymbols(
     document: vscode.TextDocument,
     token: vscode.CancellationToken
   ): Promise<vscode.DocumentSymbol[]> {
+    if (!isComponentDocument(document)) return [];
     const content = document.getText();
     const symbols: vscode.DocumentSymbol[] = [];
 

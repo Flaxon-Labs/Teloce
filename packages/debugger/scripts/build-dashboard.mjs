@@ -31,6 +31,16 @@ async function main() {
     minify: false,
   });
 
+  // Drop-in script for pages: <script src="http://localhost:9000/client.js">
+  await build({
+    entryPoints: [path.join(root, 'src', 'client', 'entry.ts')],
+    outfile: path.join(outDir, 'client.js'),
+    bundle: true,
+    format: 'iife',
+    target: 'es2018',
+    minify: true,
+  });
+
   await copyFile(path.join(srcDir, 'index.html'), path.join(outDir, 'index.html'));
   await copyFile(path.join(srcDir, 'layout.css'), path.join(outDir, 'layout.css'));
 
